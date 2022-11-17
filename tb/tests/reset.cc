@@ -61,7 +61,7 @@ std::uint32_t expected_init_cycles() {
 }
 
 struct CheckResetCB : tb::VKernelCB {
-  CheckResetCB(tb::log::Scope* lg) : r_(lg) {}
+  CheckResetCB(tb::log::Scope* lg) : r_(lg, true) {}
   bool on_negedge_clk(Vtb* tb) override {
     r_.check_reset(tb);
     return !r_.is_done();
@@ -84,7 +84,8 @@ struct CheckReset : public tb::Test {
 
 namespace tb {
 
-ResetTracker::ResetTracker(tb::log::Scope* ls) : ls_(ls) {}
+ResetTracker::ResetTracker(tb::log::Scope* ls, bool is_active_low)
+ : ls_(ls), is_active_low_(is_active_low) {}
 
 void ResetTracker::check_reset(Vtb* tb) {
   switch (st_) {
@@ -94,11 +95,11 @@ void ResetTracker::check_reset(Vtb* tb) {
     } break;
     case State::AssertReset: {
       V_LOG(ls_, Info, "In setting reset...");
-      tb::VDriver::reset(tb, true);
+      tb::VDriver::reset(tb, !is_active_low());
       st_ = State::InReset;
     } break;
     case State::InReset: {
-      tb::VDriver::reset(tb, false);
+      tb::VDriver::reset(tb, is_active_low());
       st_ = State::PostReset;
     } break;
     case State::PostReset: {
