@@ -154,7 +154,7 @@ class tb::tests::Directed::Impl : public tb::VKernelCB {
             V_LOG(parent_->lg(), Info, "Resetting UUT.");
           }
           const bool do_apply_reset = (i->n++ < 10);
-          VDriver::reset(tb, do_apply_reset);
+          VDriver::reset(tb, !do_apply_reset);
           consume_instruction = !do_apply_reset;
           if (consume_instruction) {
             V_LOG(parent_->lg(), Info, "Reset complete!");

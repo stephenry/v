@@ -144,14 +144,10 @@ enum class State { Random, FinalCheck, WindDown };
 
 const char* to_string(State st) {
   switch (st) {
-    case State::Random:
-      return "Random";
-    case State::FinalCheck:
-      return "FinalCheck";
-    case State::WindDown:
-      return "WindDown";
-    default:
-      return "Invalid";
+    case State::Random:     return "Random";
+    case State::FinalCheck: return "FinalCheck";
+    case State::WindDown:   return "WindDown";
+    default:                return "Invalid";
   }
 }
 
@@ -270,7 +266,7 @@ class Stimulus {
 
 struct RegressCB : public tb::VKernelCB {
   RegressCB(tb::Test* parent, Stimulus* s)
-      : parent_(parent), s_(s), rstt_(parent->lg()) {}
+      : parent_(parent), s_(s), rstt_(parent->lg(), true) {}
 
   bool on_negedge_clk(Vtb* tb) {
     // Issue reset process.

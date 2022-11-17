@@ -40,10 +40,10 @@
     dffen #(.W($bits(__type))) u_``__name``_reg ( \
       .d(__name``_w), .q(__name``_r), .en(__en), .clk)
 
-`define V_DFFR(__type, __name, __rst) \
+`define V_DFFR(__type, __name, __init) \
     __type __name``_r; \
     __type __name``_w; \
-    dffr #(.W($bits(__type)), .RST(__rst)) u_``__name``_reg ( \
-      .d(__name``_w), .q(__name``_r), .rst, .clk)
+    dffr #(.W($bits(__type)), .INIT(__init)) u_``__name``_reg ( \
+      .d(__name``_w), .q(__name``_r), .arst_n, .clk)
 
 `endif

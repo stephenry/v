@@ -46,7 +46,7 @@ module sva_v (
 // -------------------------------------------------------------------------- //
 // Clk/Reset
 , input                                           clk
-, input                                           rst
+, input                                           arst_n
 );
 
 `assert_not_x_when(i_upd_vld, i_upd_prod_id);

@@ -47,8 +47,8 @@ struct VPorts {
   static bool clk(Vtb* tb) { return (tb->clk != 0); }
   static void clk(Vtb* tb, bool v) { set_bool(&tb->clk, v); }
 
-  static bool rst(Vtb* tb) { return (tb->rst != 0); }
-  static void rst(Vtb* tb, bool v) { set_bool(&tb->rst, v); }
+  static bool arst_n(Vtb* tb) { return (tb->arst_n != 0); }
+  static void arst_n(Vtb* tb, bool v) { set_bool(&tb->arst_n, v); }
 
   static std::uint64_t tb_cycle(Vtb* tb) { return tb->o_tb_cycle; }
 };
@@ -82,7 +82,7 @@ bool VKernel::run(VKernelCB* cb) {
 
   // Drive all interfaces to a quiescent state.
   VPorts::clk(vtb, false);
-  VPorts::rst(vtb, false);
+  VPorts::arst_n(vtb, false);
   VDriver::issue(vtb, UpdateCommand{});
   VDriver::issue(vtb, QueryCommand{});
 
@@ -168,6 +168,6 @@ void VDriver::issue(Vtb* tb, const QueryCommand& qc) {
 
 bool VDriver::is_busy(Vtb* tb) { return (tb->o_busy_r != 0); }
 
-void VDriver::reset(Vtb* tb, bool r) { tb->rst = r ? 1 : 0; }
+void VDriver::reset(Vtb* tb, bool r) { tb->arst_n = r ? 1 : 0; }
 
 }  // namespace tb

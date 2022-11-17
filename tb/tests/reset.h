@@ -44,16 +44,18 @@ const char* to_string(State s);
 
 class ResetTracker {
  public:
-  ResetTracker(tb::log::Scope* ls);
+  explicit ResetTracker(tb::log::Scope* ls, bool active_low = false);
 
   void check_reset(Vtb* tb);
 
   bool is_done() const { return is_done_; }
   bool is_failed() const { return is_failed_; }
+  bool is_active_low() const { return is_active_low_; }
 
  private:
   bool is_done_{false};
   bool is_failed_{false};
+  bool is_active_low_{false};
   int cnt_;
   State st_{State::PreReset};
   tb::log::Scope* ls_;

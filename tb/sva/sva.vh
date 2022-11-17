@@ -29,6 +29,6 @@
 `define V_TB_SVA_SVA_VH
 
 `define assert_not_x_when(__if, __not_x) \
-  assert property (@(posedge clk) disable iff (!rst) __if -> !$isunknown(__not_x))
+  assert property (@(posedge clk) disable iff (arst_n) __if -> !$isunknown(__not_x))
 
 `endif

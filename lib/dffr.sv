@@ -32,7 +32,7 @@ module dffr #(
   parameter int W
 
   // Initial reset value
-, parameter logic [W - 1:0] RST = '0
+, parameter logic [W - 1:0] INIT = '0
 ) (
 // -------------------------------------------------------------------------- //
 // Register Interface
@@ -43,12 +43,12 @@ module dffr #(
 // -------------------------------------------------------------------------- //
 // Clk/Reset
 , input                               clk
-, input                               rst
+, input                               arst_n
 );
 
-always_ff @(posedge clk)
-  if (rst)
-    q <= RST;
+always_ff @(posedge clk or negedge arst_n)
+  if (~arst_n)
+    q <= INIT;
   else
     q <= d;
 
