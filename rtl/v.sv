@@ -60,6 +60,10 @@ module v (
 , output v_pkg::size_t                            o_lv0_size_r
 
 // -------------------------------------------------------------------------- //
+// Update Error
+, output logic                                    o_upd_error_r
+
+// -------------------------------------------------------------------------- //
 // Status
 , output logic                                    o_busy_r
 
@@ -163,6 +167,8 @@ v_pipe_update u_v_pipe_update (
   , .o_lv0_prod_id_r                    (o_lv0_prod_id_r)
   , .o_lv0_key_r                        (o_lv0_key_r)
   , .o_lv0_size_r                       (o_lv0_size_r)
+  //
+  , .o_upd_error_r                      (o_upd_error_r)
   //
   , .o_s1_upd_vld_r                     (s1_upd_vld_r)
   , .o_s1_upd_prod_id_r                 (s1_upd_prod_id_r)

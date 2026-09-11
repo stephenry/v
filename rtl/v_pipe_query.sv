@@ -90,6 +90,8 @@ logic                                   s0_state_ren;
 v_pkg::id_t                             s0_state_raddr;
 logic                                   s1_lut_en;
 logic                                   s0_lut_error_is_busy;
+logic                                   s0_lut_error_oob_ctx;
+logic                                   s0_lut_error_oob_level;
 
 // S1
 
@@ -118,8 +120,22 @@ logic                                   s1_lut_error;
 // ========================================================================== //
 
 // -------------------------------------------------------------------------- //
+// Out-of-bounds Context / Entry selection.
+//
+// Context IDs are sized as $clog2(CONTEXT_N) bits. When CONTEXT_N is not a
+// power of two, encodings in [CONTEXT_N, 2**W) are representable but do not
+// address a valid Context. Similarly, level encodings may exceed ENTRIES_N.
+// Detect these cases up-front and suppress the state-table read so that an
+// illegal address is never presented to the BRAM.
+//
+assign s0_lut_error_oob_ctx =
+    ($unsigned(i_lut_prod_id) >= cfg_pkg::CONTEXT_N);
+assign s0_lut_error_oob_level =
+    ($unsigned(i_lut_level) >= cfg_pkg::ENTRIES_N);
+
+// -------------------------------------------------------------------------- //
 // State table lookup
-assign s0_state_ren     = i_lut_vld;
+assign s0_state_ren     = i_lut_vld & (~s0_lut_error_oob_ctx);
 assign s0_state_raddr   = i_lut_prod_id;
 
 assign s1_lut_vld_w     = i_lut_vld & (~init_r);
@@ -142,7 +158,8 @@ assign s0_lut_error_is_busy   =
     (i_s4_upd_vld_r & (i_s4_upd_prod_id_r == i_lut_prod_id)) |
     (i_s5_upd_vld_r & (i_s5_upd_prod_id_r == i_lut_prod_id));
 
-assign s1_lut_error_w = s0_lut_error_is_busy;
+assign s1_lut_error_w =
+    (s0_lut_error_is_busy | s0_lut_error_oob_ctx | s0_lut_error_oob_level);
 
 // -------------------------------------------------------------------------- //
 //

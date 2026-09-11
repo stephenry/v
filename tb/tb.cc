@@ -36,6 +36,7 @@
 #include "tests/regress.h"
 #include "tests/reset.h"
 #include "tests/smoke_cmds.h"
+#include "tests/oob_error.h"
 #ifdef ENABLE_VCD
 #include "verilated_vcd_c.h"
 #endif
@@ -62,6 +63,7 @@ void register_tests(TestRegistry& tr) {
   tests::reset::init(tr);
   tests::regress::init(tr);
   tests::smoke_cmds::init(tr);
+  tests::oob_error::init(tr);
 }
 
 Kernel::Kernel() : tb_time_(0) {

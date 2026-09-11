@@ -60,6 +60,10 @@ module tb (
 , output wire v_pkg::size_t                       o_lv0_size_r
 
 // -------------------------------------------------------------------------- //
+// Update Error
+, output wire logic                               o_upd_error_r
+
+// -------------------------------------------------------------------------- //
 // Status
 , output wire logic                               o_busy_r
 
@@ -112,6 +116,8 @@ v u_v (
   , .o_lv0_prod_id_r                    (o_lv0_prod_id_r)
   , .o_lv0_key_r                        (o_lv0_key_r)
   , .o_lv0_size_r                       (o_lv0_size_r)
+  //
+  , .o_upd_error_r                      (o_upd_error_r)
   //
   , .o_busy_r                           (o_busy_r)
   //

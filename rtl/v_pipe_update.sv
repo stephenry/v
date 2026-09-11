@@ -60,6 +60,10 @@ module v_pipe_update (
 , output wire v_pkg::size_t                       o_lv0_size_r
 
 // -------------------------------------------------------------------------- //
+// Update Error (OOB Context)
+, output wire logic                               o_upd_error_r
+
+// -------------------------------------------------------------------------- //
 // Update Pipeline Interface
 //
 , output wire logic                               o_s1_upd_vld_r
@@ -94,6 +98,7 @@ module v_pipe_update (
 
 // S0:
 logic                                             s1_upd_en;
+logic                                             s0_upd_error_oob;
 
 // S1:
 //
@@ -193,15 +198,35 @@ logic                                             lv0_en;
 `V_DFFE(v_pkg::key_t, lv0_key, lv0_en);
 `V_DFFE(v_pkg::size_t, lv0_size, lv0_en);
 
+// OOB Context error delay line (aligned with writeback latency).
+`V_DFF(logic, s1_upd_err);
+`V_DFF(logic, s2_upd_err);
+`V_DFF(logic, s3_upd_err);
+`V_DFF(logic, s4_upd_err);
+`V_DFF(logic, wrbk_err);
+
 // ========================================================================== //
 //                                                                            //
 // S0 Stage: Input Latch                                                      //
 //                                                                            //
 // ========================================================================== //
 
+// -------------------------------------------------------------------------- //
+// Out-of-bounds Context detection.
+//
+// Context IDs are sized as $clog2(CONTEXT_N) bits. When CONTEXT_N is not a
+// power of two, encodings in [CONTEXT_N, 2**W) are representable but illegal.
+// Fail-safe behaviour: do not admit the command into the update datapath
+// (no SRAM access / writeback / notify), and pulse o_upd_error_r at writeback
+// latency so the error is signalled consistently with the rest of the pipe.
+//
+assign s0_upd_error_oob =
+    ($unsigned(i_upd_prod_id) >= cfg_pkg::CONTEXT_N);
+
 // Pipeline controls:
 //
-assign s1_upd_vld_w = i_upd_vld & (~init_r);
+assign s1_upd_vld_w = i_upd_vld & (~init_r) & (~s0_upd_error_oob);
+assign s1_upd_err_w = i_upd_vld & (~init_r) &   s0_upd_error_oob;
 
 assign s1_upd_en = s1_upd_vld_w;
 assign s1_upd_prod_id_w = i_upd_prod_id;
@@ -228,6 +253,7 @@ assign s1_state_raddr = s1_upd_prod_id_r;
 // Pipeline controls:
 //
 assign s2_upd_vld_w = s1_upd_vld_r & (~init_r);
+assign s2_upd_err_w = s1_upd_err_r & (~init_r);
 
 assign s2_upd_en = s2_upd_vld_w;
 assign s2_upd_prod_id_w = s1_upd_prod_id_r;
@@ -279,6 +305,7 @@ assign s3_upd_state_w =
 
 
 assign s3_upd_vld_w = s2_upd_vld_r & (~init_r);
+assign s3_upd_err_w = s2_upd_err_r & (~init_r);
 
 assign s3_upd_en =  s3_upd_vld_w;
 assign s3_upd_prod_id_w = s2_upd_prod_id_r;
@@ -311,6 +338,7 @@ v_pipe_update_cmp u_v_pipe_update_cmp (
 // -------------------------------------------------------------------------- //
 //
 assign s4_upd_vld_w = s3_upd_vld_r & (~init_r);
+assign s4_upd_err_w = s3_upd_err_r & (~init_r);
 
 assign s4_upd_en =  s4_upd_vld_w;
 assign s4_upd_prod_id_w = s3_upd_prod_id_r;
@@ -372,6 +400,10 @@ assign wrbk_state_w.listsize = s4_exe_stnxt_listsize;
 assign wrbk_state_w.key = s4_exe_stnxt_keys;
 assign wrbk_state_w.volume = s4_exe_stnxt_volumes;
 
+// OOB error writeback pulse (no state side-effects; command never entered
+// the datapath — this flop chain exists only to time the error flag).
+assign wrbk_err_w = s4_upd_err_r & (~init_r);
+
 // -------------------------------------------------------------------------- //
 // Emit messages
 
@@ -401,6 +433,9 @@ assign o_lv0_vld_r = lv0_vld_r;
 assign o_lv0_prod_id_r = lv0_prod_id_r;
 assign o_lv0_key_r = lv0_key_r;
 assign o_lv0_size_r = lv0_size_r;
+
+// Update OOB error (aligned with writeback / notify latency).
+assign o_upd_error_r = wrbk_err_r;
 
 // Update pipeline status.
 assign o_s1_upd_vld_r = s1_upd_vld_r;

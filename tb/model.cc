@@ -282,6 +282,9 @@ struct VSampler {
     }
   }
 
+  // Sample Update Error Interface (writeback-aligned):
+  static bool ue(Vtb* tb) { return to_bool(tb->o_upd_error_r); }
+
  private:
   static bool to_bool(vluint8_t v) { return (v != 0); }
 
@@ -389,18 +392,21 @@ class Model::Impl {
 
     const NotifyResponse nr{VSampler::nr(tb_)};
     const QueryResponse qr{VSampler::qr(tb_)};
+    const bool ue{VSampler::ue(tb_)};
 
-    if (logger_ && (nr.vld() || qr.vld())) {
-      logger_->Info("Response: ", nr, " | ", qr);
+    if (logger_ && (nr.vld() || qr.vld() || ue)) {
+      logger_->Info("Response: ", nr, " | ", qr, " | ue=", ue);
     }
 
     handle(nr);
     handle(qr);
+    handle_upd_error(ue);
 
     // Advance predicted state.
     ur_pipe_.step();
     nr_pipe_.step();
     qr_pipe_.step();
+    ue_pipe_.step();
   }
 
  private:
@@ -410,11 +416,18 @@ class Model::Impl {
       // therefore expect a notification.
       nr_pipe_.push_back(NotifyResponse{});
       ur_pipe_.push_back(UpdateResponse{});
+      ue_pipe_.push_back(false);
       return;
     };
 
-    // Validate that ID provided by stimulus is within [0, cfg::CONTEXT_N).
-    V_ASSERT(logger_, uc.prod_id() < cfg::CONTEXT_N);
+    // OOB Context: fail-safe NOP. RTL does not admit the command into the
+    // update datapath; expect o_upd_error_r at writeback latency.
+    if (uc.prod_id() >= cfg::CONTEXT_N) {
+      nr_pipe_.push_back(NotifyResponse{});
+      ur_pipe_.push_back(UpdateResponse{});
+      ue_pipe_.push_back(true);
+      return;
+    }
 
     UpdateResponse ur{};
     NotifyResponse nr{};
@@ -475,6 +488,7 @@ class Model::Impl {
     // Update predicted notify responses based upon outcome of prior command.
     ur_pipe_.push_back(ur);
     nr_pipe_.push_back(nr);
+    ue_pipe_.push_back(false);
   }
 
   void handle(const NotifyResponse& nr) {
@@ -493,17 +507,24 @@ class Model::Impl {
   void handle(const QueryCommand& qc) {
     QueryResponse qr;
     if (qc.vld()) {
-      V_ASSERT(logger_, qc.prod_id() < cfg::CONTEXT_N);
-      const std::vector<Entry>& ctxt{tbl_[qc.prod_id()]};
-
-      if ((qc.level() >= ctxt.size()) || ur_pipe_.has_prod_id(qc.prod_id())) {
-        // Query is errored, other fields are invalid.
+      // OOB Context, OOB level (>= ENTRIES_N), level past occupancy, or
+      // query colliding with an in-flight update to the same Context all
+      // produce an error response (payload otherwise don't-care).
+      if (qc.prod_id() >= cfg::CONTEXT_N) {
         qr = QueryResponse{0, 0, true, 0};
       } else {
-        // Query is valid, populate as necessary.
-        const Entry& e{ctxt[qc.level()]};
-        const listsize_t listsize = static_cast<listsize_t>(ctxt.size());
-        qr = QueryResponse{e.key, e.volume, false, listsize};
+        const std::vector<Entry>& ctxt{tbl_[qc.prod_id()]};
+
+        if ((qc.level() >= cfg::ENTRIES_N) || (qc.level() >= ctxt.size()) ||
+            ur_pipe_.has_prod_id(qc.prod_id())) {
+          // Query is errored, other fields are invalid.
+          qr = QueryResponse{0, 0, true, 0};
+        } else {
+          // Query is valid, populate as necessary.
+          const Entry& e{ctxt[qc.level()]};
+          const listsize_t listsize = static_cast<listsize_t>(ctxt.size());
+          qr = QueryResponse{e.key, e.volume, false, listsize};
+        }
       }
     }
     qr_pipe_.push_back(qr);
@@ -524,6 +545,16 @@ class Model::Impl {
     }
   }
 
+  void handle_upd_error(bool actual) {
+    const bool predicted = ue_pipe_.head();
+    if (predicted != actual) {
+      ++tb::Sim::errors;
+      if (logger_)
+        logger_->Error("Update error mismatch predicted: ", predicted,
+                       " actual: ", actual);
+    }
+  }
+
   template <typename T>
   void report_fail(const char* reason, const T& predicted, const T& actual) const {
     ++tb::Sim::errors;
@@ -535,6 +566,7 @@ class Model::Impl {
   DelayPipe<NotifyResponse, UPDATE_PIPE_DELAY> nr_pipe_;
   DelayPipe<UpdateResponse, UPDATE_PIPE_DELAY> ur_pipe_;
   DelayPipe<QueryResponse, QUERY_PIPE_DELAY> qr_pipe_;
+  DelayPipeBase<bool, UPDATE_PIPE_DELAY> ue_pipe_;
 
   Vtb* tb_;
   Scope* logger_{nullptr};
