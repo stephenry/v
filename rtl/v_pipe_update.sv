@@ -62,6 +62,7 @@ module v_pipe_update (
 // -------------------------------------------------------------------------- //
 // Update Error (OOB Context)
 , output wire logic                               o_upd_error_r
+, output wire v_pkg::err_syndrome_t               o_upd_error_syndrome_r
 
 // -------------------------------------------------------------------------- //
 // Update Pipeline Interface
@@ -436,6 +437,10 @@ assign o_lv0_size_r = lv0_size_r;
 
 // Update OOB error (aligned with writeback / notify latency).
 assign o_upd_error_r = wrbk_err_r;
+// Currently the only Update error is OOB Context; encode it when the delayed
+// error flag is set, otherwise ERR_OK.
+assign o_upd_error_syndrome_r =
+    wrbk_err_r ? v_pkg::ERR_OOB_CONTEXT : v_pkg::ERR_OK;
 
 // Update pipeline status.
 assign o_s1_upd_vld_r = s1_upd_vld_r;

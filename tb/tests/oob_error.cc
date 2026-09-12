@@ -68,24 +68,28 @@ struct CheckOobContext : public tb::tests::Directed {
     push_back(tb::UpdateCommand{0, tb::Cmd::Add, 42, 7});
     wait_cycles(10);
 
-    // Lookup of Context 0 / level 0 must succeed.
+    // Lookup of Context 0 / level 0 must succeed (syndrome ERR_OK).
+    V_NOTE("Expect Lookup ctx0/lvl0: error=0 syndrome=ERR_OK");
     push_back(tb::QueryCommand{0, 0});
     wait_cycles(5);
 
     // Update to an OOB Context (e.g. 10 on a 10-Context machine, or 14 when
-    // stimulus uses a larger encoding). Expect o_upd_error_r and no state
-    // side-effects.
+    // stimulus uses a larger encoding). Expect o_upd_error_r with
+    // ERR_OOB_CONTEXT and no state side-effects.
     const tb::prod_id_t oob = oob_context_id();
-    V_NOTE("Issuing OOB Update to context ", static_cast<int>(oob));
+    V_NOTE("Issuing OOB Update to context ", static_cast<int>(oob),
+           " (expect upd_error + ERR_OOB_CONTEXT)");
     push_back(tb::UpdateCommand{oob, tb::Cmd::Add, 99, 1});
     wait_cycles(10);
 
-    // Context 0 must be unchanged.
+    // Context 0 must be unchanged (syndrome ERR_OK).
+    V_NOTE("Expect Lookup ctx0/lvl0 still valid: syndrome=ERR_OK");
     push_back(tb::QueryCommand{0, 0});
     wait_cycles(5);
 
-    // Lookup of the OOB Context must return error.
-    V_NOTE("Issuing OOB Lookup to context ", static_cast<int>(oob));
+    // Lookup of the OOB Context must return error with ERR_OOB_CONTEXT.
+    V_NOTE("Issuing OOB Lookup to context ", static_cast<int>(oob),
+           " (expect error + ERR_OOB_CONTEXT)");
     push_back(tb::QueryCommand{oob, 0});
     wait_cycles(5);
 
@@ -93,7 +97,8 @@ struct CheckOobContext : public tb::tests::Directed {
     // ID width can represent it (true for default CONTEXT_N=10, 4b id_t).
     if (cfg::CONTEXT_N <= 14) {
       constexpr tb::prod_id_t ctx14 = 14;
-      V_NOTE("Issuing OOB Update/Lookup to context 14");
+      V_NOTE("Issuing OOB Update/Lookup to context 14 "
+             "(expect ERR_OOB_CONTEXT on both)");
       push_back(tb::UpdateCommand{ctx14, tb::Cmd::Clr, 0, 0});
       wait_cycles(10);
       push_back(tb::QueryCommand{ctx14, 0});
@@ -101,6 +106,7 @@ struct CheckOobContext : public tb::tests::Directed {
     }
 
     // Valid context still intact after OOB traffic.
+    V_NOTE("Final Lookup ctx0/lvl0: syndrome=ERR_OK");
     push_back(tb::QueryCommand{0, 0});
     wait_cycles(5);
 
@@ -114,7 +120,9 @@ struct CheckOobEntry : public tb::tests::Directed {
   void program() override {
     V_NOTE("Test begins: invalid Entry / n-th selection...");
 
-    // Empty context: any level is an invalid entry selection.
+    // Empty context: any level is an invalid entry selection
+    // (expect ERR_INVALID_ENTRY).
+    V_NOTE("Expect Lookup empty ctx0/lvl0: error + ERR_INVALID_ENTRY");
     push_back(tb::QueryCommand{0, 0});
     wait_cycles(5);
 
@@ -122,21 +130,25 @@ struct CheckOobEntry : public tb::tests::Directed {
     push_back(tb::UpdateCommand{0, tb::Cmd::Add, 10, 3});
     wait_cycles(10);
 
-    // Level 0 is valid.
+    // Level 0 is valid (ERR_OK).
+    V_NOTE("Expect Lookup ctx0/lvl0: syndrome=ERR_OK");
     push_back(tb::QueryCommand{0, 0});
     wait_cycles(2);
 
-    // Level past occupancy (but within ENTRIES_N) must error.
+    // Level past occupancy (but within ENTRIES_N) must error with
+    // ERR_INVALID_ENTRY.
     if (cfg::ENTRIES_N > 1) {
+      V_NOTE("Expect Lookup ctx0/lvl1 (past occupancy): ERR_INVALID_ENTRY");
       push_back(tb::QueryCommand{0, 1});
       wait_cycles(2);
     }
 
     // Level >= ENTRIES_N (representable when ENTRIES_N is not a power of two)
-    // must error.
+    // must error with ERR_OOB_LEVEL (higher priority than INVALID_ENTRY).
     if (has_oob_level_encodings()) {
       const tb::level_t oob_lvl = oob_level_id();
-      V_NOTE("Issuing OOB level ", static_cast<int>(oob_lvl));
+      V_NOTE("Issuing OOB level ", static_cast<int>(oob_lvl),
+             " (expect error + ERR_OOB_LEVEL)");
       push_back(tb::QueryCommand{0, oob_lvl});
       wait_cycles(5);
     }
@@ -148,10 +160,12 @@ struct CheckOobEntry : public tb::tests::Directed {
     }
     wait_cycles(10);
 
+    V_NOTE("Expect full-table Lookups: syndrome=ERR_OK for each occupied level");
     for (tb::level_t lvl = 0; lvl < cfg::ENTRIES_N; ++lvl) {
       push_back(tb::QueryCommand{0, lvl});
     }
     if (has_oob_level_encodings()) {
+      V_NOTE("Expect final OOB level: ERR_OOB_LEVEL");
       push_back(tb::QueryCommand{0, oob_level_id()});
     }
     wait_cycles(10);

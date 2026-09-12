@@ -46,6 +46,20 @@ typedef enum logic [1:0] {
   CMD_REPLACE = 2'b11
 } cmd_t;
 
+typedef enum logic [2:0] {
+  // No error.
+  ERR_OK             = 3'b000,
+  // Context ID is out-of-bounds (>= CONTEXT_N).
+  ERR_OOB_CONTEXT    = 3'b001,
+  // Entry/level is out-of-bounds (>= ENTRIES_N).
+  ERR_OOB_LEVEL      = 3'b010,
+  // Query collided with an in-flight update to the same Context.
+  ERR_BUSY           = 3'b011,
+  // Selected entry is not occupied (valid bit clear / past occupancy).
+  ERR_INVALID_ENTRY  = 3'b100
+} err_syndrome_t;
+
+
 typedef logic [63:0] key_t;
 localparam int KEY_BITS = $bits(key_t);
 

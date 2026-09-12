@@ -42,6 +42,7 @@ module v_pipe_query (
 , output wire v_pkg::key_t                        o_lut_key
 , output wire v_pkg::volume_t                     o_lut_size
 , output wire logic                               o_lut_error
+, output wire v_pkg::err_syndrome_t               o_lut_error_syndrome
 , output wire v_pkg::listsize_t                   o_lut_listsize
 
 // -------------------------------------------------------------------------- //
@@ -101,6 +102,8 @@ v_pkg::volume_t                         s1_lut_volume;
 logic                                   s1_lut_error_invalid_entry;
 logic                                   s1_lut_error_was_busy;
 logic                                   s1_lut_error;
+v_pkg::err_syndrome_t                   s0_lut_error_syndrome;
+v_pkg::err_syndrome_t                   s1_lut_error_syndrome;
 
 // ========================================================================== //
 //                                                                            //
@@ -111,6 +114,7 @@ logic                                   s1_lut_error;
 `V_DFF(logic, s1_lut_vld);
 `V_DFFE(v_pkg::id_t, s1_lut_prod_id, s1_lut_en);
 `V_DFFE(logic, s1_lut_error, s1_lut_en);
+`V_DFFE(v_pkg::err_syndrome_t, s1_lut_error_syndrome, s1_lut_en);
 `V_DFFE(logic [cfg_pkg::ENTRIES_N - 1:0], s1_lut_level_dec, s1_lut_en);
 
 // ========================================================================== //
@@ -160,6 +164,19 @@ assign s0_lut_error_is_busy   =
 
 assign s1_lut_error_w =
     (s0_lut_error_is_busy | s0_lut_error_oob_ctx | s0_lut_error_oob_level);
+
+// -------------------------------------------------------------------------- //
+// Encode early (S0) error syndrome. Priority (highest first):
+//   OOB_CONTEXT > OOB_LEVEL > BUSY.
+// INVALID_ENTRY is resolved in S1 once state arrives from the BRAM.
+//
+assign s0_lut_error_syndrome =
+    s0_lut_error_oob_ctx   ? v_pkg::ERR_OOB_CONTEXT :
+    s0_lut_error_oob_level ? v_pkg::ERR_OOB_LEVEL   :
+    s0_lut_error_is_busy   ? v_pkg::ERR_BUSY        :
+                             v_pkg::ERR_OK;
+
+assign s1_lut_error_syndrome_w = s0_lut_error_syndrome;
 
 // -------------------------------------------------------------------------- //
 //
@@ -218,6 +235,16 @@ assign s1_lut_error =
     (s1_lut_error_r | s1_lut_error_invalid_entry | s1_lut_error_was_busy);
 
 // -------------------------------------------------------------------------- //
+// Final error syndrome. Retain any S0 syndrome (higher priority). Otherwise
+// prefer BUSY (was_busy) over INVALID_ENTRY.
+//
+assign s1_lut_error_syndrome =
+    (s1_lut_error_syndrome_r != v_pkg::ERR_OK) ? s1_lut_error_syndrome_r :
+    s1_lut_error_was_busy                      ? v_pkg::ERR_BUSY          :
+    s1_lut_error_invalid_entry                 ? v_pkg::ERR_INVALID_ENTRY :
+                                                 v_pkg::ERR_OK;
+
+// -------------------------------------------------------------------------- //
 //
 mux #(.N(cfg_pkg::ENTRIES_N), .W(v_pkg::KEY_BITS)) u_s1_key_mux (
 //
@@ -247,6 +274,7 @@ assign o_lut_vld_r = s1_lut_vld_r;
 assign o_lut_key = s1_lut_key;
 assign o_lut_size = s1_lut_volume;
 assign o_lut_error = s1_lut_error;
+assign o_lut_error_syndrome = s1_lut_error_syndrome;
 assign o_lut_listsize = s1_lut_listsize;
 
 assign o_state_ren = s0_state_ren;
