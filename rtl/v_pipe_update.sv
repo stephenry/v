@@ -222,7 +222,7 @@ logic                                             lv0_en;
 // latency so the error is signalled consistently with the rest of the pipe.
 //
 assign s0_upd_error_oob =
-    ($unsigned(i_upd_prod_id) >= cfg_pkg::CONTEXT_N);
+    (32'(i_upd_prod_id) >= cfg_pkg::CONTEXT_N);
 
 // Pipeline controls:
 //

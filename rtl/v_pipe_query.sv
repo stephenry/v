@@ -133,9 +133,9 @@ v_pkg::err_syndrome_t                   s1_lut_error_syndrome;
 // illegal address is never presented to the BRAM.
 //
 assign s0_lut_error_oob_ctx =
-    ($unsigned(i_lut_prod_id) >= cfg_pkg::CONTEXT_N);
+    (32'(i_lut_prod_id) >= cfg_pkg::CONTEXT_N);
 assign s0_lut_error_oob_level =
-    ($unsigned(i_lut_level) >= cfg_pkg::ENTRIES_N);
+    (32'(i_lut_level) >= cfg_pkg::ENTRIES_N);
 
 // -------------------------------------------------------------------------- //
 // State table lookup
