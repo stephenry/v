@@ -104,15 +104,17 @@ bool operator!=(const QueryCommand& lhs, const QueryCommand& rhs) {
   return !operator==(lhs, rhs);
 }
 
-QueryResponse::QueryResponse() : vld_(false) {}
+QueryResponse::QueryResponse()
+    : vld_(false), syndrome_(ErrSyndrome::Ok) {}
 
 QueryResponse::QueryResponse(key_t key, volume_t volume, bool error,
-                             listsize_t listsize) {
+                             listsize_t listsize, ErrSyndrome syndrome) {
   vld_ = true;
   key_ = key;
   volume_ = volume;
   error_ = error;
   listsize_ = listsize;
+  syndrome_ = syndrome;
 }
 
 bool operator==(const QueryResponse& lhs, const QueryResponse& rhs) {
@@ -121,6 +123,8 @@ bool operator==(const QueryResponse& lhs, const QueryResponse& rhs) {
   if (!lhs.vld()) return true;
 
   if (lhs.error() != rhs.error()) return false;
+  // Syndrome is always meaningful when the response is valid.
+  if (lhs.syndrome() != rhs.syndrome()) return false;
 
   // If error, disregard further contents (unreliable).
   if (lhs.error()) return true;
@@ -167,6 +171,17 @@ void StreamRenderer<Cmd>::write(std::ostream& os, const Cmd& cmd) {
     case Cmd::Del: os << "Del"; break;
     case Cmd::Rep: os << "Rep"; break;
     default:       os << "Invalid"; break;
+  }
+}
+
+void StreamRenderer<ErrSyndrome>::write(std::ostream& os, const ErrSyndrome& s) {
+  switch (s) {
+    case ErrSyndrome::Ok:           os << "ERR_OK"; break;
+    case ErrSyndrome::OobContext:    os << "ERR_OOB_CONTEXT"; break;
+    case ErrSyndrome::OobLevel:      os << "ERR_OOB_LEVEL"; break;
+    case ErrSyndrome::Busy:          os << "ERR_BUSY"; break;
+    case ErrSyndrome::InvalidEntry:  os << "ERR_INVALID_ENTRY"; break;
+    default:                        os << "ERR_UNKNOWN"; break;
   }
 }
 
@@ -219,11 +234,13 @@ void StreamRenderer<QueryResponse>::write(std::ostream& os,
     rr.add("key", AsHex{qr.key()});
     rr.add("volume", AsDec{qr.volume()});
     rr.add("error", AsDec{qr.error()});
+    rr.add("syndrome", qr.syndrome());
     rr.add("listsize", AsDec{qr.listsize()});
   } else {
     rr.add("key", "x");
     rr.add("volume", "x");
     rr.add("error", "x");
+    rr.add("syndrome", "x");
     rr.add("listsize", "x");
   }
 }
@@ -242,6 +259,11 @@ void StreamRenderer<NotifyResponse>::write(std::ostream& os,
     rr.add("volume", "x");
   }
 }
+
+struct UpdErrorSample {
+  bool error;
+  ErrSyndrome syndrome;
+};
 
 struct VSampler {
   static UpdateCommand uc(Vtb* tb) {
@@ -275,11 +297,19 @@ struct VSampler {
   // Sample Query Response Interface:
   static QueryResponse qr(Vtb* tb) {
     if (to_bool(tb->o_lut_vld_r)) {
-      return QueryResponse{static_cast<key_t>(tb->o_lut_key), tb->o_lut_size,
-                           to_bool(tb->o_lut_error), tb->o_lut_listsize};
+      return QueryResponse{
+          static_cast<key_t>(tb->o_lut_key), tb->o_lut_size,
+          to_bool(tb->o_lut_error), tb->o_lut_listsize,
+          static_cast<ErrSyndrome>(tb->o_lut_error_syndrome)};
     } else {
       return QueryResponse{};
     }
+  }
+
+  // Sample Update Error Interface (writeback-aligned):
+  static UpdErrorSample ue(Vtb* tb) {
+    return UpdErrorSample{to_bool(tb->o_upd_error_r),
+                          static_cast<ErrSyndrome>(tb->o_upd_error_syndrome_r)};
   }
 
  private:
@@ -389,18 +419,22 @@ class Model::Impl {
 
     const NotifyResponse nr{VSampler::nr(tb_)};
     const QueryResponse qr{VSampler::qr(tb_)};
+    const UpdErrorSample ue{VSampler::ue(tb_)};
 
-    if (logger_ && (nr.vld() || qr.vld())) {
-      logger_->Info("Response: ", nr, " | ", qr);
+    if (logger_ && (nr.vld() || qr.vld() || ue.error)) {
+      logger_->Info("Response: ", nr, " | ", qr, " | ue=", ue.error,
+                    " syn=", ue.syndrome);
     }
 
     handle(nr);
     handle(qr);
+    handle_upd_error(ue);
 
     // Advance predicted state.
     ur_pipe_.step();
     nr_pipe_.step();
     qr_pipe_.step();
+    ue_pipe_.step();
   }
 
  private:
@@ -410,11 +444,19 @@ class Model::Impl {
       // therefore expect a notification.
       nr_pipe_.push_back(NotifyResponse{});
       ur_pipe_.push_back(UpdateResponse{});
+      ue_pipe_.push_back(ErrSyndrome::Ok);
       return;
     };
 
-    // Validate that ID provided by stimulus is within [0, cfg::CONTEXT_N).
-    V_ASSERT(logger_, uc.prod_id() < cfg::CONTEXT_N);
+    // OOB Context: fail-safe NOP. RTL does not admit the command into the
+    // update datapath; expect o_upd_error_r / ERR_OOB_CONTEXT at writeback
+    // latency.
+    if (uc.prod_id() >= cfg::CONTEXT_N) {
+      nr_pipe_.push_back(NotifyResponse{});
+      ur_pipe_.push_back(UpdateResponse{});
+      ue_pipe_.push_back(ErrSyndrome::OobContext);
+      return;
+    }
 
     UpdateResponse ur{};
     NotifyResponse nr{};
@@ -475,6 +517,7 @@ class Model::Impl {
     // Update predicted notify responses based upon outcome of prior command.
     ur_pipe_.push_back(ur);
     nr_pipe_.push_back(nr);
+    ue_pipe_.push_back(ErrSyndrome::Ok);
   }
 
   void handle(const NotifyResponse& nr) {
@@ -493,17 +536,23 @@ class Model::Impl {
   void handle(const QueryCommand& qc) {
     QueryResponse qr;
     if (qc.vld()) {
-      V_ASSERT(logger_, qc.prod_id() < cfg::CONTEXT_N);
-      const std::vector<Entry>& ctxt{tbl_[qc.prod_id()]};
-
-      if ((qc.level() >= ctxt.size()) || ur_pipe_.has_prod_id(qc.prod_id())) {
-        // Query is errored, other fields are invalid.
-        qr = QueryResponse{0, 0, true, 0};
+      // Priority (highest first): OOB_CONTEXT, OOB_LEVEL, BUSY,
+      // INVALID_ENTRY. Payload is don't-care on error.
+      if (qc.prod_id() >= cfg::CONTEXT_N) {
+        qr = QueryResponse{0, 0, true, 0, ErrSyndrome::OobContext};
+      } else if (qc.level() >= cfg::ENTRIES_N) {
+        qr = QueryResponse{0, 0, true, 0, ErrSyndrome::OobLevel};
+      } else if (ur_pipe_.has_prod_id(qc.prod_id())) {
+        qr = QueryResponse{0, 0, true, 0, ErrSyndrome::Busy};
       } else {
-        // Query is valid, populate as necessary.
-        const Entry& e{ctxt[qc.level()]};
-        const listsize_t listsize = static_cast<listsize_t>(ctxt.size());
-        qr = QueryResponse{e.key, e.volume, false, listsize};
+        const std::vector<Entry>& ctxt{tbl_[qc.prod_id()]};
+        if (qc.level() >= ctxt.size()) {
+          qr = QueryResponse{0, 0, true, 0, ErrSyndrome::InvalidEntry};
+        } else {
+          const Entry& e{ctxt[qc.level()]};
+          const listsize_t listsize = static_cast<listsize_t>(ctxt.size());
+          qr = QueryResponse{e.key, e.volume, false, listsize, ErrSyndrome::Ok};
+        }
       }
     }
     qr_pipe_.push_back(qr);
@@ -524,6 +573,19 @@ class Model::Impl {
     }
   }
 
+  void handle_upd_error(const UpdErrorSample& actual) {
+    const ErrSyndrome predicted_syn = ue_pipe_.head();
+    const bool predicted_err = (predicted_syn != ErrSyndrome::Ok);
+    if ((predicted_err != actual.error) ||
+        (predicted_syn != actual.syndrome)) {
+      ++tb::Sim::errors;
+      if (logger_)
+        logger_->Error("Update error mismatch predicted: err=", predicted_err,
+                       " syn=", predicted_syn, " actual: err=", actual.error,
+                       " syn=", actual.syndrome);
+    }
+  }
+
   template <typename T>
   void report_fail(const char* reason, const T& predicted, const T& actual) const {
     ++tb::Sim::errors;
@@ -535,6 +597,7 @@ class Model::Impl {
   DelayPipe<NotifyResponse, UPDATE_PIPE_DELAY> nr_pipe_;
   DelayPipe<UpdateResponse, UPDATE_PIPE_DELAY> ur_pipe_;
   DelayPipe<QueryResponse, QUERY_PIPE_DELAY> qr_pipe_;
+  DelayPipeBase<ErrSyndrome, UPDATE_PIPE_DELAY> ue_pipe_;
 
   Vtb* tb_;
   Scope* logger_{nullptr};

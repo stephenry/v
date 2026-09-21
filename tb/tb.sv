@@ -49,6 +49,7 @@ module tb (
 , output wire v_pkg::key_t                        o_lut_key
 , output wire v_pkg::size_t                       o_lut_size
 , output wire logic                               o_lut_error
+, output wire v_pkg::err_syndrome_t               o_lut_error_syndrome
 , output wire v_pkg::listsize_t                   o_lut_listsize
 
 // -------------------------------------------------------------------------- //
@@ -58,6 +59,11 @@ module tb (
 , output wire v_pkg::id_t                         o_lv0_prod_id_r
 , output wire v_pkg::key_t                        o_lv0_key_r
 , output wire v_pkg::size_t                       o_lv0_size_r
+
+// -------------------------------------------------------------------------- //
+// Update Error
+, output wire logic                               o_upd_error_r
+, output wire v_pkg::err_syndrome_t               o_upd_error_syndrome_r
 
 // -------------------------------------------------------------------------- //
 // Status
@@ -106,12 +112,16 @@ v u_v (
   , .o_lut_key                          (o_lut_key)
   , .o_lut_size                         (o_lut_size)
   , .o_lut_error                        (o_lut_error)
+  , .o_lut_error_syndrome               (o_lut_error_syndrome)
   , .o_lut_listsize                     (o_lut_listsize)
   //
   , .o_lv0_vld_r                        (o_lv0_vld_r)
   , .o_lv0_prod_id_r                    (o_lv0_prod_id_r)
   , .o_lv0_key_r                        (o_lv0_key_r)
   , .o_lv0_size_r                       (o_lv0_size_r)
+  //
+  , .o_upd_error_r                      (o_upd_error_r)
+  , .o_upd_error_syndrome_r             (o_upd_error_syndrome_r)
   //
   , .o_busy_r                           (o_busy_r)
   //

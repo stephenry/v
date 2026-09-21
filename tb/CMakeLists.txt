@@ -102,6 +102,7 @@ set(VERILATOR_A "${CMAKE_CURRENT_BINARY_DIR}/Vobj/Vtb__ALL.a")
 # Driver executable:
 set(DRIVER_CPP
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/smoke_cmds.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/tests/oob_error.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/directed.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/reset.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/regress.cc"
@@ -144,6 +145,8 @@ directed(CheckDelCmd)
 directed(CheckDelKey)
 directed(CheckListSize)
 directed(CheckReset)
+directed(CheckOobContext)
+directed(CheckOobEntry)
 
 # Awaiting debug:
 # directed(CheckRplCmd)
