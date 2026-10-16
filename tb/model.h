@@ -45,6 +45,16 @@ enum class Cmd : vluint8_t {
   Rep = 3,
   Invalid = 0xff
 };
+
+// Mirrors v_pkg::err_syndrome_t
+enum class ErrSyndrome : vluint8_t {
+  Ok            = 0b000,
+  OobContext    = 0b001,
+  OobLevel      = 0b010,
+  Busy          = 0b011,
+  InvalidEntry  = 0b100
+};
+
 using key_t = vlsint64_t;
 using volume_t = vluint32_t;
 using level_t = vluint8_t;
@@ -109,13 +119,16 @@ bool operator!=(const QueryCommand& lhs, const QueryCommand& rhs);
 class QueryResponse {
  public:
   explicit QueryResponse();
-  explicit QueryResponse(key_t key, volume_t volume, bool error, listsize_t listsize);
+  explicit QueryResponse(key_t key, volume_t volume, bool error,
+                         listsize_t listsize,
+                         ErrSyndrome syndrome = ErrSyndrome::Ok);
 
   bool vld() const { return vld_; }
   key_t key() const { return key_; }
   volume_t volume() const { return volume_; }
   bool error() const { return error_; }
   listsize_t listsize() const { return listsize_; }
+  ErrSyndrome syndrome() const { return syndrome_; }
 
  private:
   bool vld_;
@@ -123,6 +136,7 @@ class QueryResponse {
   volume_t volume_;
   bool error_;
   listsize_t listsize_;
+  ErrSyndrome syndrome_;
 };
 
 bool operator==(const QueryResponse& lhs, const QueryResponse& rhs);
@@ -176,6 +190,11 @@ struct StreamRenderer<NotifyResponse> {
 template<>
 struct StreamRenderer<Cmd> {
   static void write(std::ostream& os, const Cmd& cmd);
+};
+
+template<>
+struct StreamRenderer<ErrSyndrome> {
+  static void write(std::ostream& os, const ErrSyndrome& s);
 };
 
 class Model {

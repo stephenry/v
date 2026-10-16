@@ -50,6 +50,7 @@ module v (
 , output v_pkg::key_t                             o_lut_key
 , output v_pkg::size_t                            o_lut_size
 , output logic                                    o_lut_error
+, output v_pkg::err_syndrome_t                    o_lut_error_syndrome
 , output v_pkg::listsize_t                        o_lut_listsize
 
 // -------------------------------------------------------------------------- //
@@ -58,6 +59,11 @@ module v (
 , output v_pkg::id_t                              o_lv0_prod_id_r
 , output v_pkg::key_t                             o_lv0_key_r
 , output v_pkg::size_t                            o_lv0_size_r
+
+// -------------------------------------------------------------------------- //
+// Update Error
+, output logic                                    o_upd_error_r
+, output v_pkg::err_syndrome_t                    o_upd_error_syndrome_r
 
 // -------------------------------------------------------------------------- //
 // Status
@@ -164,6 +170,9 @@ v_pipe_update u_v_pipe_update (
   , .o_lv0_key_r                        (o_lv0_key_r)
   , .o_lv0_size_r                       (o_lv0_size_r)
   //
+  , .o_upd_error_r                      (o_upd_error_r)
+  , .o_upd_error_syndrome_r             (o_upd_error_syndrome_r)
+  //
   , .o_s1_upd_vld_r                     (s1_upd_vld_r)
   , .o_s1_upd_prod_id_r                 (s1_upd_prod_id_r)
   , .o_s2_upd_vld_r                     (s2_upd_vld_r)
@@ -206,6 +215,7 @@ v_pipe_query u_v_pipe_query (
   , .o_lut_key                          (o_lut_key)
   , .o_lut_size                         (o_lut_size)
   , .o_lut_error                        (o_lut_error)
+  , .o_lut_error_syndrome               (o_lut_error_syndrome)
   , .o_lut_listsize                     (o_lut_listsize)
   //
   , .i_state_rdata                      (query_rdata)
